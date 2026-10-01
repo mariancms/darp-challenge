@@ -1,0 +1,55 @@
+LOGICAL STEPS
+
+Task 1 - Load data into the database
+- Created three SQLite tables: accounts, daily_status and monthly_status.
+- Loaded all CSV files using Polars.
+- Added foreign keys from daily_status and monthly_status to accounts.
+- Stored the year/month from monthly filenames as snapshot_month.
+
+Caveat: The daily files used different datetime formats
+
+Normalized all datetime values during loading and validated them against the date in each filename.
+
+
+
+Task 2 - Find accounts with activity from 2025-01-01
+- Queried daily_status for records on or after 2025-01-01.
+- Used DISTINCT account_id so each account appears once.
+
+Caveat: Account 99999 ("Test Trap") is in LEGAL, but its last activity was in 2024.
+
+The date filter naturally excludes it because it had no activity on or after 2025-01-01.
+
+
+
+Task 3 - Add account details and latest activity
+- For each account from Task 2, selected its latest daily update.
+- Used ROW_NUMBER() grouped by account_id to keep one latest record per account.
+- Joined the result with accounts to add name and address.
+- Stored the result in the database and exported it to CSV.
+
+
+
+Task 4 - Latest change for COLLECTIONS / LEGAL accounts
+- Reconstructed account state as of 2025-11-27.
+- Used the October 2025 monthly snapshot as the starting state.
+- Applied November daily updates before the cutoff.
+- Kept accounts that were in COLLECTIONS or LEGAL.
+- For each qualifying account, selected its latest daily change before the cutoff.
+
+Caveat: The November monthly snapshot represents end-of-month state, so it could include changes after Nov 27.
+Did not use the November snapshot directly for the cutoff state.
+
+Caveat: Some account state information exists in monthly snapshots even when daily history is incomplete.
+Used the monthly snapshot to determine known state, but did not invent missing daily change timestamps.
+
+
+Task 5 - Query performance
+- Measured a baseline query that reads daily status records with account details for accounts that have been in COLLECTIONS or LEGAL.
+- Rewrote the query so qualifying accounts are identified once using a CTE and UNION.
+- Added indexes on:
+  - daily_status(queue, account_id)
+  - monthly_status(queue, account_id)
+  - daily_status(account_id, changed_datetime)
+- Measured the optimized query and compared the timings.
+- Verified that baseline and optimized queries returned the same results.
