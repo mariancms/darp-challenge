@@ -1,0 +1,70 @@
+PERFORMANCE COMPARISON
+
+Dataset
+-------
+Qualifying accounts: 449
+Rows returned: 3343
+Benchmark runs: 20
+
+
+Baseline
+--------
+The baseline query used correlated EXISTS checks on daily_status
+and monthly_status for each daily status row.
+
+Median time: 161.188 ms
+Mean time: 161.790 ms
+
+
+Improvements
+------------
+Logical:
+- Qualifying accounts are identified once using a CTE and UNION.
+- The result is then joined to daily_status and accounts.
+
+Database:
+- Added index on daily_status(queue, account_id)
+- Added index on monthly_status(queue, account_id)
+- Added index on daily_status(account_id, changed_datetime)
+
+
+Optimized
+---------
+Median time: 3.650 ms
+Mean time: 3.718 ms
+
+
+Comparison
+----------
+Speedup: 44.16x
+Median time reduction: 97.74%
+
+
+Validation
+----------
+Baseline and optimized queries returned the same results.
+
+
+Baseline Query Plan
+-------------------
+4 | 0 | 216 | SCAN d
+7 | 0 | 0 | CORRELATED SCALAR SUBQUERY 1
+11 | 7 | 216 | SCAN history
+25 | 0 | 0 | CORRELATED SCALAR SUBQUERY 2
+29 | 25 | 216 | SCAN monthly
+42 | 0 | 45 | SEARCH a USING INTEGER PRIMARY KEY (rowid=?)
+54 | 0 | 0 | USE TEMP B-TREE FOR ORDER BY
+
+
+Optimized Query Plan
+--------------------
+2 | 0 | 0 | CO-ROUTINE qualifying_accounts
+3 | 2 | 0 | COMPOUND QUERY
+4 | 3 | 0 | LEFT-MOST SUBQUERY
+7 | 4 | 65 | SEARCH daily_status USING COVERING INDEX idx_daily_queue_account (queue=?)
+30 | 3 | 0 | UNION USING TEMP B-TREE
+32 | 30 | 64 | SEARCH monthly_status USING COVERING INDEX idx_monthly_queue_account (queue=?)
+65 | 0 | 69 | SCAN q
+68 | 0 | 45 | SEARCH a USING INTEGER PRIMARY KEY (rowid=?)
+74 | 0 | 62 | SEARCH d USING INDEX idx_daily_account_datetime (account_id=?)
+94 | 0 | 0 | USE TEMP B-TREE FOR ORDER BY
